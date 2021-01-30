@@ -33,6 +33,9 @@ ConVar sv_portal_trace_vs_staticprops ("sv_portal_trace_vs_staticprops", "1", FC
 ConVar sv_use_find_closest_passable_space ("sv_use_find_closest_passable_space", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Enables heavy-handed player teleporting stuck fix code." );
 ConVar sv_use_transformed_collideables("sv_use_transformed_collideables", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Disables traces against remote portal moving entities using transforms to bring them into local space." );
 
+ConVar portal_1_color("portal_1_color", "148 0 212", FCVAR_REPLICATED, "Sets the colour used to determine the blue portal colours.");
+ConVar portal_2_color("portal_2_color", "212 212 0", FCVAR_REPLICATED, "Sets the colour used to determine the orange portal colours.");
+
 class CTransformedCollideable : public ICollideable //wraps an existing collideable, but transforms everything that pertains to world space by another transform
 {
 public:
@@ -154,26 +157,41 @@ const matrix3x4_t* CTransformedCollideable::GetRootParentToWorldTransform() cons
 	return &m_ReferencedVars.m_matRootParentToWorldTransform;
 }
 
-// TODO: un-hardcode these
-//       Possibly tie to a cvar? It's not easy to put a colour value into a cvar though...
 Color UTIL_Portal_Color( int iPortal )
 {
-	switch ( iPortal )
-	{
-		case 0:
-			// GRAVITY BEAM
-			return Color( 242, 202, 167, 255 );
+    int clrPortalR = 255;
+    int clrPortalG = 255;
+    int clrPortalB = 255;
 
-		case 1:
-			// PORTAL 1
-			return Color( 148, 32, 212, 255 );
+    if (iPortal == 0) // GRAVITY BEAM
+		return Color( 242, 202, 167, 255 );
 
-		case 2:
-			// PORTAL 2
-			return Color( 212, 212, 32, 255 );
-	}
+	else if(iPortal == 1) { // PORTAL 1
 
-	return Color( 255, 255, 255, 255 );
+        const char *portal1ColorString = portal_1_color.GetString();
+		int scanned = sscanf( portal1ColorString, "%i %i %i", &clrPortalR, &clrPortalG, &clrPortalB );
+
+        if (!scanned == 3) {
+            Warning("Somehow failed to read all 3 colour values for portal 1");
+            return Color(255,0,0,255);
+        }
+
+        return Color( clrPortalR, clrPortalG, clrPortalB, 255 );
+    }
+    else if (iPortal == 2) { // PORTAL 2
+
+        const char *portal2ColorString = portal_2_color.GetString();
+		int scanned = sscanf( portal2ColorString, "%i %i %i", &clrPortalR, &clrPortalG, &clrPortalB );
+
+        if (!scanned == 3) {
+            Warning("Somehow failed to read all 3 colour values for portal 2");
+            return Color(255,0,0,255);
+        }
+
+        return Color( clrPortalR, clrPortalG, clrPortalB, 255 );
+    }
+
+	return Color(255, 255, 255, 255);
 }
 
 void UTIL_Portal_Trace_Filter( CTraceFilterSimpleClassnameList *traceFilterPortalShot )
