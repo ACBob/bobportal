@@ -32,6 +32,7 @@ ConVar sv_portal_trace_vs_holywall ("sv_portal_trace_vs_holywall", "1", FCVAR_RE
 ConVar sv_portal_trace_vs_staticprops ("sv_portal_trace_vs_staticprops", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Use traces against portal environment static prop geometry" );
 ConVar sv_use_find_closest_passable_space ("sv_use_find_closest_passable_space", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Enables heavy-handed player teleporting stuck fix code." );
 ConVar sv_use_transformed_collideables("sv_use_transformed_collideables", "1", FCVAR_REPLICATED | FCVAR_CHEAT, "Disables traces against remote portal moving entities using transforms to bring them into local space." );
+
 class CTransformedCollideable : public ICollideable //wraps an existing collideable, but transforms everything that pertains to world space by another transform
 {
 public:
@@ -153,6 +154,8 @@ const matrix3x4_t* CTransformedCollideable::GetRootParentToWorldTransform() cons
 	return &m_ReferencedVars.m_matRootParentToWorldTransform;
 }
 
+// TODO: un-hardcode these
+//       Possibly tie to a cvar? It's not easy to put a colour value into a cvar though...
 Color UTIL_Portal_Color( int iPortal )
 {
 	switch ( iPortal )
@@ -163,11 +166,11 @@ Color UTIL_Portal_Color( int iPortal )
 
 		case 1:
 			// PORTAL 1
-			return Color( 64, 160, 255, 255 );
+			return Color( 148, 32, 212, 255 );
 
 		case 2:
 			// PORTAL 2
-			return Color( 255, 160, 32, 255 );
+			return Color( 212, 212, 32, 255 );
 	}
 
 	return Color( 255, 255, 255, 255 );
