@@ -49,7 +49,7 @@
 #ifdef PORTAL
 #include "portal_physics_collisionevent.h"
 #include "physicsshadowclone.h"
-#include "PortalSimulation.h"
+#include "portalsimulation.h"
 void PortalPhysFrame( float deltaTime ); //small wrapper for PhysFrame that simulates all 3 environments at once
 #endif
 

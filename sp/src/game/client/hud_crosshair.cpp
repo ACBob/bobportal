@@ -92,12 +92,13 @@ bool CHudCrosshair::ShouldDraw( void )
 	C_BaseCombatWeapon *pWeapon = pPlayer->GetActiveWeapon();
 	if ( pWeapon && !pWeapon->ShouldDrawCrosshair() )
 		return false;
-
+/*
 #ifdef PORTAL
 	C_Portal_Player *portalPlayer = ToPortalPlayer(pPlayer);
 	if ( portalPlayer && portalPlayer->IsSuppressingCrosshair() )
 		return false;
 #endif // PORTAL
+*/
 
 	/* disabled to avoid assuming it's an HL2 player.
 	// suppress crosshair in zoom.
