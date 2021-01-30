@@ -25,8 +25,7 @@
 #define PORTALGUN_GLOW_SPRITE "sprites/glow04_noz"
 #define PORTALGUN_ENDCAP_SPRITE "sprites/grav_flare"
 #define PORTALGUN_GRAV_ACTIVE_GLOW "sprites/grav_light"
-#define PORTALGUN_PORTAL1_FIRED_LAST_GLOW "sprites/bluelight"
-#define PORTALGUN_PORTAL2_FIRED_LAST_GLOW "sprites/orangelight"
+#define PORTALGUN_PORTAL_FIRED_LAST_GLOW "sprites/portalgun_effects"
 #define PORTALGUN_PORTAL_MUZZLE_GLOW_SPRITE "sprites/portalgun_effects"
 #define PORTALGUN_PORTAL_TUBE_BEAM_SPRITE "sprites/portalgun_effects"
 

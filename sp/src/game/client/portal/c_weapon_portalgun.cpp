@@ -38,8 +38,7 @@ CLIENTEFFECT_MATERIAL( PORTALGUN_BEAM_SPRITE_NOZ )
 CLIENTEFFECT_MATERIAL( PORTALGUN_GLOW_SPRITE )
 CLIENTEFFECT_MATERIAL( PORTALGUN_ENDCAP_SPRITE )
 CLIENTEFFECT_MATERIAL( PORTALGUN_GRAV_ACTIVE_GLOW )
-CLIENTEFFECT_MATERIAL( PORTALGUN_PORTAL1_FIRED_LAST_GLOW )
-CLIENTEFFECT_MATERIAL( PORTALGUN_PORTAL2_FIRED_LAST_GLOW )
+CLIENTEFFECT_MATERIAL( PORTALGUN_PORTAL_FIRED_LAST_GLOW )
 CLIENTEFFECT_MATERIAL( PORTALGUN_PORTAL_MUZZLE_GLOW_SPRITE )
 CLIENTEFFECT_MATERIAL( PORTALGUN_PORTAL_TUBE_BEAM_SPRITE )
 CLIENTEFFECT_REGISTER_END()
@@ -208,6 +207,10 @@ void C_WeaponPortalgun::StartEffects( void )
 {
 	int i;
 
+	m_Parameters[PORTALGUN_PORTALLIGHT].SetVisible( true );
+	m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetVisible( true );
+
+
 	CBaseEntity *pModelView = ( ( GetOwner() ) ? ( ToBasePlayer( GetOwner() )->GetViewModel() ) : ( 0 ) );
 	CBaseEntity *pModelWorld = this;
 	
@@ -248,56 +251,28 @@ void C_WeaponPortalgun::StartEffects( void )
 		}
 	}
 
-	if ( m_Parameters[PORTALGUN_PORTAL1LIGHT].GetMaterial() == NULL )
+	if ( m_Parameters[PORTALGUN_PORTALLIGHT].GetMaterial() == NULL )
 	{
-		m_Parameters[PORTALGUN_PORTAL1LIGHT].GetScale().SetAbsolute( 0.018f * SPRITE_SCALE );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT].GetAlpha().SetAbsolute( 128.0f );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT].SetAttachment( pModelView->LookupAttachment( "Body_light" ) );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT].SetVisible( false );
+		m_Parameters[PORTALGUN_PORTALLIGHT].GetScale().SetAbsolute( 0.018f * SPRITE_SCALE );
+		m_Parameters[PORTALGUN_PORTALLIGHT].GetAlpha().SetAbsolute( 128.0f );
+		m_Parameters[PORTALGUN_PORTALLIGHT].SetAttachment( pModelView->LookupAttachment( "Body_light" ) );
+		m_Parameters[PORTALGUN_PORTALLIGHT].SetVisible( false );
 
-		if ( m_Parameters[PORTALGUN_PORTAL1LIGHT].SetMaterial( PORTALGUN_PORTAL1_FIRED_LAST_GLOW ) == false )
+		if ( m_Parameters[PORTALGUN_PORTALLIGHT].SetMaterial( PORTALGUN_PORTAL_FIRED_LAST_GLOW ) == false )
 		{
 			// This means the texture was not found
 			Assert( 0 );
 		}
 	}
 
-	if ( m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].GetMaterial() == NULL )
+	if ( m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].GetMaterial() == NULL )
 	{
-		m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].GetScale().SetAbsolute( 0.03f * SPRITE_SCALE );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].GetAlpha().SetAbsolute( 128.0f );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetAttachment( pModelWorld->LookupAttachment( "Body_light" ) );
-		m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetVisible( false );
+		m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].GetScale().SetAbsolute( 0.03f * SPRITE_SCALE );
+		m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].GetAlpha().SetAbsolute( 128.0f );
+		m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetAttachment( pModelWorld->LookupAttachment( "Body_light" ) );
+		m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetVisible( false );
 
-		if ( m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetMaterial( PORTALGUN_PORTAL1_FIRED_LAST_GLOW ) == false )
-		{
-			// This means the texture was not found
-			Assert( 0 );
-		}
-	}
-
-	if ( m_Parameters[PORTALGUN_PORTAL2LIGHT].GetMaterial() == NULL )
-	{
-		m_Parameters[PORTALGUN_PORTAL2LIGHT].GetScale().SetAbsolute( 0.018f * SPRITE_SCALE );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT].GetAlpha().SetAbsolute( 128.0f );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT].SetAttachment( pModelView->LookupAttachment( "Body_light" ) );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT].SetVisible( false );
-
-		if ( m_Parameters[PORTALGUN_PORTAL2LIGHT].SetMaterial( PORTALGUN_PORTAL2_FIRED_LAST_GLOW ) == false )
-		{
-			// This means the texture was not found
-			Assert( 0 );
-		}
-	}
-
-	if ( m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].GetMaterial() == NULL )
-	{
-		m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].GetScale().SetAbsolute( 0.03f * SPRITE_SCALE );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].GetAlpha().SetAbsolute( 128.0f );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].SetAttachment( pModelWorld->LookupAttachment( "Body_light" ) );
-		m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].SetVisible( false );
-
-		if ( m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].SetMaterial( PORTALGUN_PORTAL2_FIRED_LAST_GLOW ) == false )
+		if ( m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetMaterial( PORTALGUN_PORTAL_FIRED_LAST_GLOW ) == false )
 		{
 			// This means the texture was not found
 			Assert( 0 );
@@ -692,10 +667,8 @@ void C_WeaponPortalgun::DoEffectNone( void )
 	//Turn off main glows
 	m_Parameters[PORTALGUN_GRAVLIGHT].SetVisible( false );
 	m_Parameters[PORTALGUN_GRAVLIGHT_WORLD].SetVisible( false );
-	m_Parameters[PORTALGUN_PORTAL1LIGHT].SetVisible( false );
-	m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetVisible( false );
-	m_Parameters[PORTALGUN_PORTAL2LIGHT].SetVisible( false );
-	m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetVisible( false );
+	m_Parameters[PORTALGUN_PORTALLIGHT].SetVisible( false );
+	m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetVisible( false );
 
 	for ( i = PORTALGUN_GLOW1; i < (PORTALGUN_GLOW1+NUM_GLOW_SPRITES); i++ )
 	{
@@ -805,11 +778,9 @@ void C_WeaponPortalgun::ClientThink( void )
 				m_Parameters[PORTALGUN_GRAVLIGHT].SetVisibleViewModel( false );
 				m_Parameters[PORTALGUN_GRAVLIGHT_WORLD].SetVisible3rdPerson( false );
 
-				//Turn on and off the correct fired last lights
-				m_Parameters[PORTALGUN_PORTAL1LIGHT].SetVisibleViewModel( m_iLastFiredPortal == 1 );
-				m_Parameters[PORTALGUN_PORTAL1LIGHT_WORLD].SetVisible3rdPerson( m_iLastFiredPortal == 1 );
-				m_Parameters[PORTALGUN_PORTAL2LIGHT].SetVisibleViewModel( m_iLastFiredPortal == 2 );
-				m_Parameters[PORTALGUN_PORTAL2LIGHT_WORLD].SetVisible3rdPerson( m_iLastFiredPortal == 2 );
+				//Set the right light colour
+                m_Parameters[PORTALGUN_PORTALLIGHT].SetColor( GetEffectColor( 0 ) );
+                m_Parameters[PORTALGUN_PORTALLIGHT_WORLD].SetColor( GetEffectColor( 0 ) );
 			}
 		}
 	}
