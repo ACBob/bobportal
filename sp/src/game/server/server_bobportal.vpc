@@ -340,6 +340,7 @@ $Project "Server (Bob Portal)"
 			$File	"portal\trigger_portal_cleanser.cpp"
 
             $File   "bobportal\prop_button.cpp"
+            $File   "bobportal\prop_button.h"
 
 			$Folder	"Weapons"
 			{

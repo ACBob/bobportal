@@ -240,6 +240,7 @@
       <File Name="base_transmit_proxy.cpp"/>
       <File Name="bitstring.cpp"/>
       <File Name="bmodels.cpp"/>
+      <File Name="bobportal/prop_button.cpp"/>
       <File Name="buttons.cpp"/>
       <File Name="cbase.cpp"/>
       <File Name="client.cpp"/>
@@ -1015,6 +1016,7 @@
       <File Name="baseviewmodel.h"/>
       <File Name="base_transmit_proxy.h"/>
       <File Name="bitstring.h"/>
+      <File Name="bobportal/prop_button.h"/>
       <File Name="buttons.h"/>
       <File Name="cbase.h"/>
       <File Name="client.h"/>

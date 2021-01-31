@@ -4,230 +4,184 @@
 //
 //=============================================================================
 
-#include "cbase.h"
-#include "doors.h"
-#include "ndebugoverlay.h"
-#include "spark.h"
-#include "vstdlib/random.h"
-#include "engine/IEngineSound.h"
-#include "tier1/strtools.h"
-#include "buttons.h"
-#include "eventqueue.h"
-#include "props.h"
+#include "prop_button.h"
 
-class CPropButton : public CBaseProp {
+#define BUTTON_MODEL "models/props/switch001.mdl"
+#define BUTTON_DOWN_SOUND "Portal.button_down"
+#define BUTTON_UP_SOUND "Portal.button_up"
 
-    public:
-        DECLARE_CLASS(CPropButton, CBaseProp);
+/* this is the base button, allowing us to make other prop-based buttons that aren't confined to a portal button... It's feature creep, essentially. */
 
-        CPropButton();
-
-        void Activate();
-        void Spawn(void);
-        void Precache();
-
-        void ButtonUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
-        void ButtonReturn();
-        void ButtonActivate();
-
-        void SetPropAnim( const char *szAnim );
-
-        bool CreateVPhysics();
-
-        int ObjectCaps();
-
-
-        void InputLock( inputdata_t& input_data );
-        void InputUnlock( inputdata_t& input_data );
-        void InputPress( inputdata_t& input_data );
-        void InputPressIn( inputdata_t& input_data );
-        void InputPressOut( inputdata_t& input_data );
-
-	    DECLARE_DATADESC();
-
-        COutputEvent m_OnDamaged;
-        COutputEvent m_OnPressed;
-        COutputEvent m_OnUseLocked;
-        COutputEvent m_OnIn;
-        COutputEvent m_OnOut;
-
-    protected:
-        string_t m_ModelName;
-        int m_iSkin;
-
-        float m_flHoldTime; // How long we hold the button in a 'pushed' state
-
-        bool m_bDisabled;
-        bool m_bLocked;
-
-        string_t m_UpSound;
-        string_t m_DownSound;
-};
-
-LINK_ENTITY_TO_CLASS(prop_button, CPropButton);
-
-BEGIN_DATADESC( CPropButton )
-	
-    DEFINE_KEYFIELD( m_ModelName, FIELD_STRING, "modelname" ),
-    DEFINE_KEYFIELD( m_iSkin, FIELD_INTEGER, "skin" ),
-    DEFINE_KEYFIELD( m_flHoldTime, FIELD_FLOAT, "delay" ),
+BEGIN_DATADESC(CPropButton)
     
-    DEFINE_KEYFIELD( m_UpSound, FIELD_FLOAT, "downSound" ),
-    DEFINE_KEYFIELD( m_DownSound, FIELD_FLOAT, "upSound" ),
+    // Key Fields
+    DEFINE_KEYFIELD(m_ModelName, FIELD_STRING, "model"),
+    DEFINE_KEYFIELD(m_nSkin, FIELD_INTEGER, "skin"),
+    DEFINE_KEYFIELD(m_DownSound, FIELD_STRING, "downSound"),
+    DEFINE_KEYFIELD(m_UpSound, FIELD_STRING, "upSound"),
+    DEFINE_KEYFIELD(m_flWaitTime, FIELD_FLOAT, "delay"),
+    DEFINE_KEYFIELD(m_bCantCancel, FIELD_BOOLEAN, "preventfastreset"),
 
-	// Function Pointers
-	DEFINE_FUNCTION( ButtonUse ),
-
-	// Inputs
-	DEFINE_INPUTFUNC( FIELD_VOID, "Lock", InputLock ),
-	DEFINE_INPUTFUNC( FIELD_VOID, "Unlock", InputUnlock ),
-	DEFINE_INPUTFUNC( FIELD_VOID, "Press", InputPress ),
-	DEFINE_INPUTFUNC( FIELD_VOID, "PressIn", InputPressIn ),
-	DEFINE_INPUTFUNC( FIELD_VOID, "PressOut", InputPressOut ),
-
-	// Outputs
-	DEFINE_OUTPUT( m_OnDamaged, "OnDamaged" ),
-	DEFINE_OUTPUT( m_OnPressed, "OnPressed" ),
-	DEFINE_OUTPUT( m_OnUseLocked, "OnUseLocked" ),
-	DEFINE_OUTPUT( m_OnIn, "OnIn" ),
-	DEFINE_OUTPUT( m_OnOut, "OnOut" ),
+    // Functions
+    DEFINE_USEFUNC(ButtonUse),
+    DEFINE_INPUTFUNC(FIELD_VOID, "Press", InputPress),
+    
+    // Outputs
+    DEFINE_OUTPUT(m_OnPressed, "OnPressed"),
+    DEFINE_OUTPUT(m_OnReset, "OnButtonReset")
 
 END_DATADESC()
 
-CPropButton::CPropButton(void) {}
-
-// Stuff
-void CPropButton::Activate() {
+void CPropButton::CheckSequence(int id) {
+    bool sequenceStatus = PrefetchSequence(id);
+    sequenceStatus;
+    Assert(id != ACT_INVALID && sequenceStatus);
 }
+
+int CPropButton::ObjectCaps() {
+    return BaseClass::ObjectCaps() | FCAP_IMPULSE_USE;
+}
+
+void CPropButton::InputPress(inputdata_t& inputdata) {
+    Press();
+}
+
+void CPropButton::Press() {
+    m_bPressed = true;
+    m_OnPressed.FireOutput(this, this);
+}
+void CPropButton::UnPress() {
+    m_bPressed = false;
+    m_OnUnPressed.FireOutput(this, this);
+
+    if (m_flWaitTime > 0)
+        SetThink( NULL );
+}
+void CPropButton::Reset() {
+    m_OnReset.FireOutput(this, this);
+}
+
+void CPropButton::ButtonUse(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) {
+    Press();
+}
+
 
 void CPropButton::Spawn() {
-	char *szModel = (char *)STRING( GetModelName() );
-	if (!szModel || !*szModel)
-	{
-		Warning( "prop_button at %.0f %.0f %0.f missing modelname, using default\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z );
-        szModel = "models/props/switch001.mdl";
-       
-        SetModelName( AllocPooledString(szModel) );
-	}
-
-    Precache();
-    SetModel( szModel );
-
-    SetSolid( SOLID_VPHYSICS );
-
-    SetUse(&CPropButton::ButtonUse);
-
     BaseClass::Spawn();
 
-    m_bDisabled = false;
-    m_bLocked = false;
+    SetSolid(SOLID_VPHYSICS);
+    SetUse(&CPropButton::Use);
 
     CreateVPhysics();
+    SetPlaybackRate(1.0f);
+
+    m_bStay = (m_flWaitTime <= -1);
+    if (m_flWaitTime < 0.0f)
+        m_flWaitTime = 0.0f;
 }
 
-bool CPropButton::CreateVPhysics()
-{
-	VPhysicsInitShadow( false, false );
-	return true;
+void CPropButton::ReachedEndOfSequence(void) {
+    if (GetSequence() == upSequence) {
+		SetNextThink( gpGlobals->curtime + m_flWaitTime );
+		SetThink( &CPropButton::UnPress );
+    }
+
+    if (GetSequence() == downSequence) {
+        Reset();
+    }
 }
 
-void CPropButton::Precache() {
+/* Ok now here's the portal button */
+
+class CPortalPropButton : public CPropButton {
+
+    public:
+        DECLARE_CLASS(CPortalPropButton, CPropButton);
+
+        CPortalPropButton();
+        
+        void Spawn();
+        void Precache();
+
+        void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
+
+        void Press();
+        void UnPress();
+        void ReachedEndOfSequence(void);
+};
+
+LINK_ENTITY_TO_CLASS(prop_button, CPortalPropButton);
+
+CPortalPropButton::CPortalPropButton(){}
+
+void CPortalPropButton::Precache() {
+
+    if (m_ModelName == NULL_STRING)
+        m_ModelName = MAKE_STRING( BUTTON_MODEL );
+    PrecacheModel( STRING( m_ModelName ) );
+
+    if (m_DownSound == NULL_STRING)
+        m_DownSound = MAKE_STRING( BUTTON_DOWN_SOUND );
+    PrecacheScriptSound( STRING( m_DownSound ) );
+
+    if (m_UpSound == NULL_STRING)
+        m_UpSound = MAKE_STRING( BUTTON_UP_SOUND );
+    PrecacheScriptSound( STRING( m_UpSound ) );
+
     BaseClass::Precache();
-
-    PrecacheModel( STRING( GetModelName() ) );
-    PrecacheScriptSound( STRING(m_DownSound) );
-    PrecacheScriptSound( STRING(m_UpSound) );
 }
 
-// Functions
-void CPropButton::ButtonUse( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
-{
-    if (m_bDisabled || m_bLocked)
-        return; // Don't do anything for disabled OR locked buttons
+void CPortalPropButton::Spawn() {
+    Precache();
+    BaseClass::Spawn();
+    SetModel( STRING(m_ModelName) );
+
+    idleSequence = LookupSequence("idle");
+    downSequence = LookupSequence("down");
+    upSequence = LookupSequence("up");
     
-    m_bLocked = true; // Lock the button
-    ButtonActivate();
+    CheckSequence(idleSequence);
+    CheckSequence(downSequence);
+    CheckSequence(upSequence);
 
-    m_OnPressed.FireOutput(pActivator, this);
+    SetUse(&CPortalPropButton::Use);
 
-	SetNextThink( gpGlobals->curtime + m_flHoldTime );
-	SetThink( &CPropButton::ButtonReturn );
-    
+    CreateVPhysics();
+    PropSetAnim("idle");
 }
 
-void CPropButton::ButtonReturn( void )
-{
-    m_bLocked = false; //Unlock the button
-    
-	if ( m_UpSound != NULL_STRING )
-	{
-		CPASAttenuationFilter filter( this );
+void CPortalPropButton::Press() {
+    BaseClass::Press();
 
-		EmitSound_t ep;
-		ep.m_nChannel = CHAN_VOICE;
-		ep.m_pSoundName = (char*)STRING(m_UpSound);
-		ep.m_flVolume = 1;
-		ep.m_SoundLevel = SNDLVL_NORM;
-
-		EmitSound( filter, entindex(), ep );
-	}
-
-    SetPropAnim("down");
+    PropSetAnim("down");
+    EmitSound( STRING( m_DownSound ) );
 }
 
-int	CPropButton::ObjectCaps(void)
-{
-	return((BaseClass::ObjectCaps() & ~FCAP_ACROSS_TRANSITION) | FCAP_IMPULSE_USE | FCAP_USE_IN_RADIUS );
+void CPortalPropButton::UnPress() {
+    if (!m_bPressed)
+        return; // If we're not even pressed, don't allow it
+
+    BaseClass::UnPress();
+
+    PropSetAnim("up");
+    EmitSound( STRING( m_UpSound ) );
 }
 
-void CPropButton::ButtonActivate( void )
-{
-	if ( m_DownSound != NULL_STRING )
-	{
-		CPASAttenuationFilter filter( this );
-
-		EmitSound_t ep;
-		ep.m_nChannel = CHAN_VOICE;
-		ep.m_pSoundName = (char*)STRING(m_DownSound);
-		ep.m_flVolume = 1;
-		ep.m_SoundLevel = SNDLVL_NORM;
-
-		EmitSound( filter, entindex(), ep );
-	}
-
-    SetPropAnim("up");
+void CPortalPropButton::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) {
+    if (!m_bPressed)    
+        Press();
+    else if (!m_bCantCancel) { // We're pressed AND we can cancel it
+        UnPress(); // Cancel the press
+    }
 }
 
-void CPropButton::SetPropAnim( const char *szAnim )
-{
-	if ( !szAnim )
-		return;
+void CPortalPropButton::ReachedEndOfSequence() {
+    if (GetSequence() == downSequence && !m_bStay) { // If we've just pushed down, AND we aren't a toggle button
+		SetNextThink( gpGlobals->curtime + m_flWaitTime );
+		SetThink( &CPortalPropButton::UnPress );
+    }
 
-	int nSequence = LookupSequence( szAnim );
-
-	// Set to the desired anim, or default anim if the desired is not present
-	if ( nSequence > ACTIVITY_NOT_AVAILABLE )
-	{
-		BaseClass::SetSequence( nSequence );
-	}
-	else
-	{
-		// Not available try to get default anim
-		Warning( "Dynamic prop %s: no sequence named:%s\n", GetDebugName(), szAnim );
-		SetSequence( 0 );
-	}
-}
-
-// Inputs
-void CPropButton::InputLock( inputdata_t& input_data ) {
-    m_bLocked = true;
-}
-void CPropButton::InputUnlock( inputdata_t& input_data ) {
-    m_bLocked = false;
-}
-void CPropButton::InputPress( inputdata_t& input_data ) {
-}
-void CPropButton::InputPressIn( inputdata_t& input_data ) {
-}
-void CPropButton::InputPressOut( inputdata_t& input_data ) {
+    if (GetSequence() == upSequence) {
+        Reset();
+    }
 }
