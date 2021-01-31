@@ -420,6 +420,13 @@ void CBaseAnimating::StudioFrameAdvanceInternal( CStudioHdr *pStudioHdr, float f
 	float flNewCycle = GetCycle() + flCycleDelta;
 	if (flNewCycle < 0.0 || flNewCycle >= 1.0) 
 	{
+#ifdef BOBPORTAL
+        if (flNewCycle >= 1.0f)
+        {
+            ReachedEndOfSequence();
+        }
+#endif // BOBPORTAL
+
 		if (m_bSequenceLoops)
 		{
 			flNewCycle -= (int)(flNewCycle);

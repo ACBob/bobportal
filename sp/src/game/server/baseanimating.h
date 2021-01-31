@@ -83,6 +83,9 @@ public:
 	virtual void	StudioFrameAdvance(); // advance animation frame to some time in the future
 	void StudioFrameAdvanceManual( float flInterval );
 	bool	IsValidSequence( int iSequence );
+#ifdef BOBPORTAL
+    virtual void ReachedEndOfSequence() { return; };
+#endif // BOBPORTAL
 
 	inline float					GetPlaybackRate();
 	inline void						SetPlaybackRate( float rate );
