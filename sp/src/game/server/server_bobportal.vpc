@@ -339,6 +339,8 @@ $Project "Server (Bob Portal)"
 			$File	"$SRCDIR\game\shared\portal\StaticCollisionPolyhedronCache.h"
 			$File	"portal\trigger_portal_cleanser.cpp"
 
+            $File   "bobportal\prop_button.cpp"
+
 			$Folder	"Weapons"
 			{
 				$File	"$SRCDIR\game\server\portal\weapon_physcannon.cpp"
