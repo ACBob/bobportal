@@ -16,7 +16,7 @@ BEGIN_DATADESC(CPropButton)
     
     // Key Fields
     DEFINE_KEYFIELD(m_ModelName, FIELD_STRING, "model"),
-    DEFINE_KEYFIELD(m_nSkin, FIELD_INTEGER, "skin"),
+    DEFINE_KEYFIELD(m_SkinA, FIELD_INTEGER, "skin"),
     DEFINE_KEYFIELD(m_DownSound, FIELD_STRING, "downSound"),
     DEFINE_KEYFIELD(m_UpSound, FIELD_STRING, "upSound"),
     DEFINE_KEYFIELD(m_flWaitTime, FIELD_FLOAT, "delay"),
@@ -148,6 +148,8 @@ void CPortalPropButton::Spawn() {
 
     CreateVPhysics();
     PropSetAnim("idle");
+
+    m_nSkin = m_SkinA;
 }
 
 void CPortalPropButton::Press() {
@@ -176,6 +178,9 @@ void CPortalPropButton::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 }
 
 void CPortalPropButton::ReachedEndOfSequence() {
+    // HACK: since we're called pretty frequently any-hoo...
+    m_nSkin = m_bPressed ? m_SkinA + 1 : m_SkinA;
+
     if (GetSequence() == downSequence && !m_bStay) { // If we've just pushed down, AND we aren't a toggle button
 		SetNextThink( gpGlobals->curtime + m_flWaitTime );
 		SetThink( &CPortalPropButton::UnPress );

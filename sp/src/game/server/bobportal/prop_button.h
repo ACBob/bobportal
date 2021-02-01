@@ -46,6 +46,8 @@ class CPropButton : public CDynamicProp {
         int idleSequence;
         int downSequence;
         int upSequence;
+    
+        int m_SkinA;
 
         bool m_bStay;
         bool m_bCantCancel;
