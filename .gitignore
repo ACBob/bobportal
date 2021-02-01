@@ -27,6 +27,8 @@ ipch
 obj*/
 !devtools/*.mak
 !utils/smdlexp/smdlexp.mak
+*.a
+*.lib
 
 # Specific Source build products
 client.pdb
