@@ -27,8 +27,11 @@ ipch
 obj*/
 !devtools/*.mak
 !utils/smdlexp/smdlexp.mak
+# Because 'specific source build products' isn't working for me, I'm going nuclear!
 *.a
 *.lib
+*.so
+*.so.dbg
 
 # Specific Source build products
 client.pdb
