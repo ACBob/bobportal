@@ -7,6 +7,7 @@
 #include "prop_button.h"
 
 #define BUTTON_MODEL "models/props/switch001.mdl"
+#define BUTTON_FLOOR_MODEL "models/props/button_joined.mdl"
 #define BUTTON_DOWN_SOUND "Portal.button_down"
 #define BUTTON_UP_SOUND "Portal.button_up"
 
@@ -59,6 +60,10 @@ void CPropButton::UnPress() {
 }
 void CPropButton::Reset() {
     m_OnReset.FireOutput(this, this);
+
+    // Also reset our animation
+    PropSetAnim("idle");
+    m_iszDefaultAnim = MAKE_STRING( "idle" );
 }
 
 void CPropButton::ButtonUse(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) {
@@ -132,9 +137,10 @@ void CPortalPropButton::Precache() {
 }
 
 void CPortalPropButton::Spawn() {
+	SetSolid(SOLID_VPHYSICS);
     Precache();
-    BaseClass::Spawn();
     SetModel( STRING(m_ModelName) );
+    BaseClass::Spawn();
 
     idleSequence = LookupSequence("idle");
     downSequence = LookupSequence("down");
@@ -146,13 +152,19 @@ void CPortalPropButton::Spawn() {
 
     SetUse(&CPortalPropButton::Use);
 
-    CreateVPhysics();
+	CreateVPhysics();
+
     PropSetAnim("idle");
 
     m_nSkin = m_SkinA;
+
+    m_bPressed = false;
 }
 
 void CPortalPropButton::Press() {
+    if (m_bPressed) // If we're pressed, don't allow it
+        return;
+
     BaseClass::Press();
 
     PropSetAnim("down");
@@ -189,4 +201,148 @@ void CPortalPropButton::ReachedEndOfSequence() {
     if (GetSequence() == upSequence) {
         Reset();
     }
+}
+
+/*============================================================================//
+//
+// Purpose: The floor button
+//
+//============================================================================*/
+
+class CPropPortalFloorButton : public CPropButton {
+    public:
+        DECLARE_CLASS(CPropPortalFloorButton, CPropButton);
+
+        CPropPortalFloorButton();
+
+        void Spawn();
+        void Precache();
+        void TryTouch(CBaseEntity *pOther);
+
+        void Press();
+        void UnPress();
+
+        void TouchThink();
+
+    protected:
+        int m_TouchCount;
+
+        int idleDownSequence;
+
+        Vector m_vButtonPartBound; // The bounding box around the 'button' part
+
+};
+
+LINK_ENTITY_TO_CLASS(prop_floor_button, CPropPortalFloorButton);
+
+CPropPortalFloorButton::CPropPortalFloorButton(){}
+
+void CPropPortalFloorButton::Spawn() {
+	SetSolid(SOLID_VPHYSICS);
+    Precache();
+
+    SetModel( STRING(m_ModelName) );
+    PropSetAnim("idle");
+    m_iszDefaultAnim = MAKE_STRING("idle");
+
+    BaseClass::Spawn();
+
+    SetUse(NULL);
+
+    idleSequence = LookupSequence("idle");
+    downSequence = LookupSequence("down");
+    upSequence = LookupSequence("up");
+    idleDownSequence = LookupSequence("idledown");
+    
+    CheckSequence(idleSequence);
+    CheckSequence(downSequence);
+    CheckSequence(upSequence);
+    CheckSequence(idleDownSequence);
+
+    // TODO: What do the numbers mean??!!
+    //       The numbers, mason! What do they mean?!
+    //       ..Stop writing code in the early hours of the morning!
+    m_vButtonPartBound = Vector(48, 48, 40);
+
+    SetThink(&CPropPortalFloorButton::TouchThink);
+    SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
+
+    m_bPressed = false;
+
+    CreateVPhysics();
+}
+
+void CPropPortalFloorButton::Precache() {
+
+    if (m_ModelName == NULL_STRING)
+        m_ModelName = MAKE_STRING( BUTTON_FLOOR_MODEL );
+    PrecacheModel( STRING( m_ModelName ) );
+
+    if (m_DownSound == NULL_STRING)
+        m_DownSound = MAKE_STRING( BUTTON_DOWN_SOUND );
+    PrecacheScriptSound( STRING( m_DownSound ) );
+
+    if (m_UpSound == NULL_STRING)
+        m_UpSound = MAKE_STRING( BUTTON_UP_SOUND );
+    PrecacheScriptSound( STRING( m_UpSound ) );
+
+    BaseClass::Precache();
+}
+
+void CPropPortalFloorButton::TouchThink(void) {
+
+    m_TouchCount = 0;
+    CBaseEntity *pObject = NULL;
+
+    // TODO: right now it only responds to players and prop_physics-es-ess...
+    while ( (pObject = gEntList.FindEntityByClassname(pObject, "prop_physics")) != NULL ) {
+        TryTouch(pObject);
+    }
+    while ( (pObject = gEntList.FindEntityByClassname(pObject, "player")) != NULL ) {
+        TryTouch(pObject);
+    }
+
+    if (m_TouchCount == 0 && m_bPressed) {
+        UnPress();
+    }
+    else if (m_TouchCount > 0 && !m_bPressed) {
+        Press();
+    }
+
+    m_nSkin = m_bPressed ? m_SkinA + 1 : m_SkinA;
+
+    SetThink(&CPropPortalFloorButton::TouchThink);
+    SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
+}
+
+void CPropPortalFloorButton::TryTouch(CBaseEntity *pOther) {
+    Vector ourPos = GetAbsOrigin();
+    Vector theirPos = pOther->GetAbsOrigin();
+    Vector posDifference = ourPos - theirPos;
+
+    // Test to see if the entity is within our working bounds
+    if (posDifference.x > m_vButtonPartBound.x || posDifference.x < -m_vButtonPartBound.x)
+        return;
+    if (posDifference.y > m_vButtonPartBound.y || posDifference.y < -m_vButtonPartBound.y)
+        return;
+    if (posDifference.x > m_vButtonPartBound.z || posDifference.z < -m_vButtonPartBound.z)
+        return;
+
+    m_TouchCount++;
+}
+
+void CPropPortalFloorButton::Press() {
+    BaseClass::Press();
+
+    PropSetAnim("down");
+    m_iszDefaultAnim = MAKE_STRING("idledown");
+    EmitSound( STRING( m_DownSound ) );
+}
+void CPropPortalFloorButton::UnPress() {
+    BaseClass::UnPress();
+    Reset();
+
+    PropSetAnim("up");
+    m_iszDefaultAnim = MAKE_STRING("idle");
+    EmitSound( STRING( m_UpSound ) );
 }

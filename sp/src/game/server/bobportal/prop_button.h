@@ -22,8 +22,8 @@ class CPropButton : public CDynamicProp {
 
         CPropButton() {};
         bool CreateVPhysics() {
-            VPhysicsInitStatic();
-            return true;        
+            BaseClass::CreateVPhysics(); // We're essentially a coked-up prop_dynamic, just use their vphysics creation....
+            return true;
         };
 
         void InputPress( inputdata_t& inputdata );
