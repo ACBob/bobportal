@@ -56,14 +56,10 @@ void CPropButton::UnPress() {
     m_OnUnPressed.FireOutput(this, this);
 
     if (m_flWaitTime > 0)
-        SetThink( NULL );
+        SetContextThink( NULL, gpGlobals->curtime, "UnPressSchedule" );
 }
 void CPropButton::Reset() {
     m_OnReset.FireOutput(this, this);
-
-    // Also reset our animation
-    PropSetAnim("idle");
-    m_iszDefaultAnim = MAKE_STRING( "idle" );
 }
 
 void CPropButton::ButtonUse(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) {
@@ -80,6 +76,8 @@ void CPropButton::Spawn() {
     CreateVPhysics();
     SetPlaybackRate(1.0f);
 
+    RegisterThinkContext( "UnPressSchedule" );
+
     m_bStay = (m_flWaitTime <= -1);
     if (m_flWaitTime < 0.0f)
         m_flWaitTime = 0.0f;
@@ -87,8 +85,7 @@ void CPropButton::Spawn() {
 
 void CPropButton::ReachedEndOfSequence(void) {
     if (GetSequence() == upSequence) {
-		SetNextThink( gpGlobals->curtime + m_flWaitTime );
-		SetThink( &CPropButton::UnPress );
+		SetContextThink( &CPropButton::UnPress, gpGlobals->curtime + m_flWaitTime, "UnPressSchedule" );
     }
 
     if (GetSequence() == downSequence) {
@@ -194,21 +191,12 @@ void CPortalPropButton::ReachedEndOfSequence() {
     m_nSkin = m_bPressed ? m_SkinA + 1 : m_SkinA;
 
     if (GetSequence() == downSequence && !m_bStay) { // If we've just pushed down, AND we aren't a toggle button
-		SetNextThink( gpGlobals->curtime + m_flWaitTime );
-		SetThink( &CPortalPropButton::UnPress );
+		SetContextThink( &CPortalPropButton::UnPress, gpGlobals->curtime + m_flWaitTime, "UnPressSchedule" );
     }
 
     if (GetSequence() == upSequence) {
         Reset();
     }
-
-    // We need this, either because
-    // Because of the way SetThink works(?) we don't reach AnimThink(); and that doesn't do it for us
-    // OR
-    // Because it tries to update the CDynamicProp's bone followers, not ours...
-    // Putting it here introduces latency (like the skin updating), but It works well enough - and who's actually going to use
-    // A model with bone followers for the switch? C'mon.
-	m_BoneFollowerManager.UpdateBoneFollowers(this);
 }
 
 /*============================================================================//
@@ -229,8 +217,10 @@ class CPropPortalFloorButton : public CPropButton {
 
         void Press();
         void UnPress();
+        void Reset();
 
         void TouchThink();
+        void ReachedEndOfSequence();
 
     protected:
         int m_TouchCount;
@@ -245,9 +235,6 @@ LINK_ENTITY_TO_CLASS(prop_floor_button, CPropPortalFloorButton);
 
 CPropPortalFloorButton::CPropPortalFloorButton(){}
 
-// FIXMEFIXMEFIXMEFIXME
-// Ok, what the *actual* fuck, the animations are flipped for some reason.
-
 void CPropPortalFloorButton::Spawn() {
 	SetSolid(SOLID_VPHYSICS);
     Precache();
@@ -259,6 +246,9 @@ void CPropPortalFloorButton::Spawn() {
     BaseClass::Spawn();
 
     SetUse(NULL);
+
+    // A model is expected to have these animations to work properly.
+    // Portal 2's button is missing ONLY the idle (replaced by BindPose), but that's their fault.
 
     idleSequence = LookupSequence("idle");
     downSequence = LookupSequence("down");
@@ -275,9 +265,12 @@ void CPropPortalFloorButton::Spawn() {
     //       ..Stop writing code in the early hours of the morning!
     m_vButtonPartBound = Vector(48, 48, 40);
 
-    SetThink(&CPropPortalFloorButton::TouchThink);
-    SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
+    RegisterThinkContext("TouchThinkSchedule");
+    SetContextThink(&CPropPortalFloorButton::TouchThink, gpGlobals->curtime + TICK_INTERVAL, "TouchThinkSchedule");
     
+    PropSetAnim("idle");
+    m_iszDefaultAnim = MAKE_STRING( "idle" );
+
     CreateVPhysics();
 }
 
@@ -320,14 +313,8 @@ void CPropPortalFloorButton::TouchThink(void) {
 
     m_nSkin = m_bPressed ? m_SkinA + 1 : m_SkinA;
 
-    SetThink(&CPropPortalFloorButton::TouchThink);
-    SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
+    SetContextThink(&CPropPortalFloorButton::TouchThink, gpGlobals->curtime + TICK_INTERVAL, "TouchThinkSchedule");
 
-    // We need this, either because
-    // Because of the way SetThink works(?) we don't reach AnimThink(); and that doesn't do it for us
-    // OR
-    // Because it tries to update the CDynamicProp's bone followers, not ours...
-	m_BoneFollowerManager.UpdateBoneFollowers(this);
 }
 
 void CPropPortalFloorButton::TryTouch(CBaseEntity *pOther) {
@@ -352,6 +339,7 @@ void CPropPortalFloorButton::Press() {
     BaseClass::Press();
 
     PropSetAnim("down");
+    m_iszDefaultAnim = MAKE_STRING( "idledown" );
     EmitSound( STRING( m_DownSound ) );
 }
 void CPropPortalFloorButton::UnPress() {
@@ -362,4 +350,17 @@ void CPropPortalFloorButton::UnPress() {
 
     PropSetAnim("up");
     EmitSound( STRING( m_UpSound ) );
+}
+
+void CPropPortalFloorButton::Reset() {
+    BaseClass::Reset();
+
+    PropSetAnim("idle");
+    m_iszDefaultAnim = MAKE_STRING( "idle" );
+}
+
+void CPropPortalFloorButton::ReachedEndOfSequence() {
+    if (GetSequence() == upSequence) {
+        Reset();
+    }
 }
