@@ -201,6 +201,14 @@ void CPortalPropButton::ReachedEndOfSequence() {
     if (GetSequence() == upSequence) {
         Reset();
     }
+
+    // We need this, either because
+    // Because of the way SetThink works(?) we don't reach AnimThink(); and that doesn't do it for us
+    // OR
+    // Because it tries to update the CDynamicProp's bone followers, not ours...
+    // Putting it here introduces latency (like the skin updating), but It works well enough - and who's actually going to use
+    // A model with bone followers for the switch? C'mon.
+	m_BoneFollowerManager.UpdateBoneFollowers(this);
 }
 
 /*============================================================================//
@@ -237,6 +245,9 @@ LINK_ENTITY_TO_CLASS(prop_floor_button, CPropPortalFloorButton);
 
 CPropPortalFloorButton::CPropPortalFloorButton(){}
 
+// FIXMEFIXMEFIXMEFIXME
+// Ok, what the *actual* fuck, the animations are flipped for some reason.
+
 void CPropPortalFloorButton::Spawn() {
 	SetSolid(SOLID_VPHYSICS);
     Precache();
@@ -266,9 +277,7 @@ void CPropPortalFloorButton::Spawn() {
 
     SetThink(&CPropPortalFloorButton::TouchThink);
     SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
-
-    m_bPressed = false;
-
+    
     CreateVPhysics();
 }
 
@@ -313,6 +322,12 @@ void CPropPortalFloorButton::TouchThink(void) {
 
     SetThink(&CPropPortalFloorButton::TouchThink);
     SetNextThink(gpGlobals->curtime + TICK_INTERVAL);
+
+    // We need this, either because
+    // Because of the way SetThink works(?) we don't reach AnimThink(); and that doesn't do it for us
+    // OR
+    // Because it tries to update the CDynamicProp's bone followers, not ours...
+	m_BoneFollowerManager.UpdateBoneFollowers(this);
 }
 
 void CPropPortalFloorButton::TryTouch(CBaseEntity *pOther) {
@@ -332,17 +347,19 @@ void CPropPortalFloorButton::TryTouch(CBaseEntity *pOther) {
 }
 
 void CPropPortalFloorButton::Press() {
+    if (m_bPressed)
+        return;
     BaseClass::Press();
 
     PropSetAnim("down");
-    m_iszDefaultAnim = MAKE_STRING("idledown");
     EmitSound( STRING( m_DownSound ) );
 }
 void CPropPortalFloorButton::UnPress() {
+    if (!m_bPressed)
+        return;
     BaseClass::UnPress();
     Reset();
 
     PropSetAnim("up");
-    m_iszDefaultAnim = MAKE_STRING("idle");
     EmitSound( STRING( m_UpSound ) );
 }

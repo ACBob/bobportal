@@ -22,7 +22,24 @@ class CPropButton : public CDynamicProp {
 
         CPropButton() {};
         bool CreateVPhysics() {
-            BaseClass::CreateVPhysics(); // We're essentially a coked-up prop_dynamic, just use their vphysics creation....
+            // For whatever reason, No matter what I do, no matter what I write, no matter how I write it,
+            // The bone followers ALWAYS end up non-solid. Because of this, we MUST overwrite the vphysics creation code.
+            // So that *we* can make a solid(!!) collection of bone followers, allowing collision.
+            // Thanks, source!
+
+            // we don't allow disabling them anyway, so just create them...
+            CreateBoneFollowers();
+
+            if (m_BoneFollowerManager.GetNumBoneFollowers()) {
+                // We can skip the whole setting them as non-solid, because that's what's creating the issue in the first place!
+
+                AddSolidFlags(FSOLID_NOT_SOLID); // *we* aren't solid, our bone followers should be though.
+        		AddSolidFlags( FSOLID_CUSTOMRAYTEST | FSOLID_CUSTOMBOXTEST ); // Use our bone followers for collision.
+            }
+            else {
+                VPhysicsInitStatic();
+            }
+
             return true;
         };
 
