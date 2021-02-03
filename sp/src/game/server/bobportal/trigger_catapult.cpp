@@ -24,7 +24,7 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
         
         Vector CalcJumpLaunchVelocity(const Vector &startPos, const Vector &endPos, float flGravity, float *pminHeight, float maxHorzVelocity, Vector *pvecApex );
 
-        Vector GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer);
+        Vector GenerateVelocity(Vector vecOther, Vector vecTarget, IPhysicsObject *physObject);
 
         bool VelocityThreshold(Vector velOther);
 
@@ -122,12 +122,10 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
 
     if (!VelocityThreshold(pOther->GetAbsVelocity())) // Not going fast enough/too fast?
         return;
-
-    // These IFs are confusing and could probably be written better, I'm just happy it's working.
-    // First we check if we actually have a target set. if we don't, we choose to launch by angles and skip everything else.
     
     CBaseEntity *pJumpTarget = NULL;
-    // Then, if we are willing to launch by target, we look for the target.
+
+    // If we are willing to launch by target, we look for the target.
     if (m_jumpTarget != NULL_STRING) {
         // Get the entitiy
         pJumpTarget = gEntList.FindEntityByName(pJumpTarget, m_jumpTarget);
@@ -146,7 +144,8 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
 
     // If we don't want to launch by angles, we do the cool launch
     if (!m_bLaunchByAngles) {
-        velGoZoomZoom = GenerateVelocity(pOther->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), pOther->IsPlayer());
+        velGoZoomZoom = GenerateVelocity(pOther->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(),
+            (!pOther->IsPlayer() ? pOther->VPhysicsGetObject() : NULL) ); // if we're not a player, send our vphysics object, else, send NULL
         if (sv_debug_catapults.GetInt())
             NDebugOverlay::Line( GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), 0, 255, 0, 0, 5 ); // Green
     }
@@ -155,48 +154,42 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
         Vector LaunchDir;
 	    VectorRotate( m_vLaunchDirection, EntityToWorldTransform(), LaunchDir );
         velGoZoomZoom = LaunchDir * (pOther->IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed);
-    }
-
-    if (sv_debug_catapults.GetInt())
-        NDebugOverlay::Line( GetAbsOrigin(), velGoZoomZoom, 255, 255, 0, 0, 5 ); // Yellow
+    }        
 
 
     pOther->SetGroundEntity(NULL); // Essential for allowing the stuff to yEET
 
 
-    if (pOther->IsPlayer())
-        pOther->SetAbsVelocity(velGoZoomZoom);
-    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We modify the velocity here to take into account drag and such
+    if (pOther->IsPlayer()) {
+        if (!m_bLaunchByAngles) 
+            pOther->SetAbsVelocity(velGoZoomZoom);
+        else
+            pOther->ApplyAbsVelocityImpulse(velGoZoomZoom);
+    }
+    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We launch physics objects here
         IPhysicsObject *pPhysObject = pOther->VPhysicsGetObject();
 
         AngularImpulse velRotZoomZoom = Vector();
         if (m_bApplyRandomRotation) {
-            velRotZoomZoom = RandomAngularImpulse( -90 , 90 ) / pPhysObject->GetMass();
+            velRotZoomZoom = RandomAngularImpulse( -250 , 250 ) / pPhysObject->GetMass();
         }
         else {
             velRotZoomZoom = RandomAngularImpulse( 0, 0 );
         }
 
-        Vector velIntemediaryZoomZoom = velGoZoomZoom;
-        Vector velUnit = velIntemediaryZoomZoom;
-        VectorNormalize(velUnit);
-
-        float flTest = 1000 / velIntemediaryZoomZoom.Length();
-
-        float flDrag = pPhysObject->CalculateLinearDrag( velIntemediaryZoomZoom );
-
-        velIntemediaryZoomZoom = velIntemediaryZoomZoom + ( velUnit * ( flDrag * flDrag ) );
-
-        velGoZoomZoom = velIntemediaryZoomZoom;
-
-        pPhysObject->SetVelocity(&velGoZoomZoom, &velRotZoomZoom);
+        if (!m_bLaunchByAngles)
+            pPhysObject->SetVelocityInstantaneous(&velGoZoomZoom, &velRotZoomZoom);
+        else
+            pPhysObject->ApplyForceCenter(velGoZoomZoom);
     }
     // We have launched the thing!
     m_OutputOnCatapulted.FireOutput(this, this);
 }
 
-Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) {
+Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, IPhysicsObject *physObject = NULL) {
     /** Copied parts from the antlion, bodged the rest **/
+
+    bool isPlayer = (physObject == NULL);
 
     float minJumpHeight;
     if (vecOther.z > vecTarget.z)
@@ -213,13 +206,35 @@ Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, boo
     Vector vecApex;
 	Vector rawJumpVel = CalcJumpLaunchVelocity(GetAbsOrigin(), vecTarget, GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex );
 
+    // We're not done yet if we're a physics object!
+    if (!isPlayer) {
+        Vector filteredJumpVel = rawJumpVel;
+        Vector velUnit = filteredJumpVel;
+        VectorNormalize(velUnit); // Turn it into length(?)
+
+		float flTest = 1000 / filteredJumpVel.Length();
+
+        float flDrag = physObject->CalculateLinearDrag(filteredJumpVel);
+
+        // Add the drag squared to the velocity -
+        // Velocity += Direction * flDrag squared
+        filteredJumpVel = filteredJumpVel + ( velUnit * ( flDrag * flDrag ) ) / flTest;
+
+        // Set this to the velocity we'll use
+        rawJumpVel = filteredJumpVel;
+    }
+
 	if ( sv_debug_catapults.GetInt())
 	{
 		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 255, 0, 5 ); // Magenta
 
         // Draw the path we SHOULD take
+        // FIXME: Inaccurate if we're a phys object
 		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 0, 0, 5 ); // Red
-		NDebugOverlay::Line( vecApex, vecTarget, 0, 255, 0, 0, 5 ); // Red
+		NDebugOverlay::Line( vecApex, vecTarget, 255, 0, 0, 0, 5 ); // Red
+
+        // Display the velocity
+        NDebugOverlay::Line( GetAbsOrigin(), rawJumpVel, 255, 255, 0, 0, 5 ); // Yellow
 	}
 
     return rawJumpVel;
