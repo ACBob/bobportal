@@ -10,9 +10,9 @@
 
 ConVar sv_debug_catapults( "sv_debug_catapults", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "Display some debug information for catapults." );
 
-class CTriggerCatapult : public CTriggerMultiple {
+class CTriggerCatapult : public CBaseVPhysicsTrigger {
     public:
-        DECLARE_CLASS(CTriggerCatapult, CTriggerMultiple);
+        DECLARE_CLASS(CTriggerCatapult, CBaseVPhysicsTrigger);
         DECLARE_DATADESC();
 
         CTriggerCatapult();
@@ -22,11 +22,17 @@ class CTriggerCatapult : public CTriggerMultiple {
         
         Vector CalcJumpLaunchVelocity(const Vector &startPos, const Vector &endPos, float flGravity, float *pminHeight, float maxHorzVelocity, Vector *pvecApex );
 
+        Vector GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer);
+
+        bool ThereIsReasonToNot(CBaseEntity *pOther);
+
     protected:
         string_t m_jumpTarget;
 
         float m_PlayerLaunchSpeed;
         float m_PhysicsLaunchSpeed;
+
+        COutputEvent m_OutputOnCatapulted;
         
         Vector m_vLaunchDirection;
         QAngle m_LaunchDirection;
@@ -40,7 +46,9 @@ BEGIN_DATADESC( CTriggerCatapult )
     DEFINE_KEYFIELD(m_PlayerLaunchSpeed, FIELD_FLOAT, "playerSpeed"),
     DEFINE_KEYFIELD(m_PhysicsLaunchSpeed, FIELD_FLOAT, "physicsSpeed"),
 
-    DEFINE_KEYFIELD(m_vLaunchDirection, FIELD_VECTOR, "launchDirection")
+    DEFINE_KEYFIELD(m_vLaunchDirection, FIELD_VECTOR, "launchDirection"),
+
+    DEFINE_OUTPUT(m_OutputOnCatapulted, "OnCatapulted")
 
 END_DATADESC()
 
@@ -66,7 +74,7 @@ void CTriggerCatapult::Spawn() {
 
 void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 
-	if ( !pOther->IsSolid() || (pOther->GetMoveType() == MOVETYPE_PUSH || pOther->GetMoveType() == MOVETYPE_NONE ) )
+    if ( !pOther->IsSolid() || (pOther->GetMoveType() == MOVETYPE_PUSH || pOther->GetMoveType() == MOVETYPE_NONE ) )
 		return;
 
 	if (!PassesTriggerFilters(pOther))
@@ -74,18 +82,9 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 
 	if (pOther->GetMoveParent())
 		return;
+    
 
-
-    Msg("checking wee\n");
-    if (!PassesTriggerFilters(pOther)) {
-        Msg("can't wee\n");
-        return;
-    }
-
-    Msg("go wee, my friend %s\n", pOther->GetClassname());
-
-
-    if (m_jumpTarget == NULL_STRING) {
+    if (m_jumpTarget == NULL_STRING) { // TODO: portal 2's functionality of just launching in the set direction
         Error("prop_catapult at %.0f %.0f %.0f has no target! Cannot launch!\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z);
         return;
     }
@@ -98,39 +97,42 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
         Error("prop_catapult at %.0f %.0f %.0f couldn't find its' target. Can't launch!\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z);
         return; // Didn't find anyone!
     }
-
-    /** Copied parts from the antlion, bodged the rest **/
 	
-	float minJumpHeight = GetAbsOrigin().z - pJumpTarget->GetAbsOrigin().z; // It must be ATLEAST high enough for our target
+	Vector velGoZoomZoom = GenerateVelocity(pOther->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), pOther->IsPlayer());
+
+    pOther->SetGroundEntity(NULL); // Essential for allowing the player to yEET
+    pOther->SetAbsVelocity(velGoZoomZoom);
+    // We have launched the thing!
+    m_OutputOnCatapulted.FireOutput(this, this);
+}
+Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) {
+    /** Copied parts from the antlion, bodged the rest **/
+
+    float minJumpHeight = GetAbsOrigin().z - vecTarget.z; // It must be ATLEAST high enough for our target
     float maxHorzVel;
-    if (pOther->IsPlayer())
+    if (isPlayer)
     	maxHorzVel = m_PlayerLaunchSpeed;
     else
         maxHorzVel = m_PhysicsLaunchSpeed;
 
-    float m_flFlyTime = 1.0f;
-
     Vector vecApex;
-	Vector rawJumpVel = CalcJumpLaunchVelocity(GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex );
+	Vector rawJumpVel = CalcJumpLaunchVelocity(GetAbsOrigin(), vecTarget, GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex );
 
 	if ( sv_debug_catapults.GetInt() == 1 )
 	{
-		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 255, 0, 5 );
-		NDebugOverlay::Line( GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), 0, 255, 0, 0, 5 );
-		NDebugOverlay::Line( GetAbsOrigin(), rawJumpVel, 255, 255, 0, 0, 5 );
+		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 255, 0, 5 ); // Magenta
+		NDebugOverlay::Line( GetAbsOrigin(), vecTarget, 0, 255, 0, 0, 5 ); // Green
+		NDebugOverlay::Line( GetAbsOrigin(), rawJumpVel, 255, 255, 0, 0, 5 ); // Yellow
 
         // Draw the path we SHOULD take
-		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 0, 255, 255, 0, 5 );
-		NDebugOverlay::Line( vecApex, pJumpTarget->GetAbsOrigin(), 0, 255, 255, 0, 5 );
+		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 0, 0, 5 ); // Red
+		NDebugOverlay::Line( vecApex, vecTarget, 0, 255, 0, 0, 5 ); // Red
 	}
 
-    Vector velGoZoomZoom = rawJumpVel;
-
-    pOther->SetGroundEntity(NULL);
-    pOther->SetAbsVelocity(rawJumpVel);
+    return rawJumpVel;
 }
 
-/** Copied from CAI_MoveProbe **/
+/** Copied from CAI_MoveProbe, TODO: Is there a better way of accessing this function? **/
 Vector CTriggerCatapult::CalcJumpLaunchVelocity(const Vector &startPos, const Vector &endPos, float flGravity, float *pminHeight, float maxHorzVelocity, Vector *pvecApex )
 {
 	// Get the height I have to jump to get to the target
