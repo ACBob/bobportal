@@ -19,19 +19,23 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
         CTriggerCatapult();
 
         void Spawn();
-        void Touch(CBaseEntity *pOther);
+        void StartTouch(CBaseEntity *pOther);
+        void BopIt(CBaseEntity *pOther);
         
         Vector CalcJumpLaunchVelocity(const Vector &startPos, const Vector &endPos, float flGravity, float *pminHeight, float maxHorzVelocity, Vector *pvecApex );
 
         Vector GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer);
 
-        bool ThereIsReasonToNot(CBaseEntity *pOther);
+        bool VelocityThreshold(Vector velOther);
 
     protected:
         string_t m_jumpTarget;
 
         float m_PlayerLaunchSpeed;
         float m_PhysicsLaunchSpeed;
+
+        float m_velThresholdLow;
+        float m_velThresholdHigh;
 
         COutputEvent m_OutputOnCatapulted;
         
@@ -40,6 +44,8 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
 
         bool m_bLaunchByAngles;
         bool m_bApplyRandomRotation;
+        bool m_bOnlyCheckVelocity;
+        bool m_bTestVelocity;
 };
 
 LINK_ENTITY_TO_CLASS(trigger_catapult, CTriggerCatapult)
@@ -50,8 +56,11 @@ BEGIN_DATADESC( CTriggerCatapult )
     DEFINE_KEYFIELD(m_PlayerLaunchSpeed, FIELD_FLOAT, "playerSpeed"),
     DEFINE_KEYFIELD(m_PhysicsLaunchSpeed, FIELD_FLOAT, "physicsSpeed"),
     DEFINE_KEYFIELD(m_bApplyRandomRotation, FIELD_BOOLEAN, "applyAngularImpulse"),
-
+    DEFINE_KEYFIELD(m_bOnlyCheckVelocity, FIELD_BOOLEAN, "onlyVelocityCheck"),
     DEFINE_KEYFIELD(m_vLaunchDirection, FIELD_VECTOR, "launchDirection"),
+    DEFINE_KEYFIELD(m_velThresholdLow, FIELD_FLOAT, "lowerThreshold"),
+    DEFINE_KEYFIELD(m_velThresholdHigh, FIELD_FLOAT, "upperThreshold"),
+    DEFINE_KEYFIELD(m_bTestVelocity, FIELD_BOOLEAN, "useThresholdCheck"),
 
     DEFINE_OUTPUT(m_OutputOnCatapulted, "OnCatapulted")
 
@@ -71,22 +80,48 @@ void CTriggerCatapult::Spawn() {
 
     AddSolidFlags(FSOLID_NOT_SOLID | FSOLID_TRIGGER);
 
-    SetTouch(&CTriggerCatapult::Touch);
-
     VPhysicsInitShadow( false, false );
 }
 
-void CTriggerCatapult::Touch(CBaseEntity *pOther) {
+void CTriggerCatapult::StartTouch(CBaseEntity *pOther) { // FIXME: We only launch if they have just started to touch us, but is that the behaviour we want?
+    BaseClass::StartTouch(pOther);
 
-    if ( !pOther->IsSolid() || (pOther->GetMoveType() == MOVETYPE_PUSH || pOther->GetMoveType() == MOVETYPE_NONE ) )
-		return;
+    if (PassesTriggerFilters(pOther)) {
+        if (!m_bOnlyCheckVelocity)
+            BopIt(pOther);
+        else {
+            // We only check the velocity, so do so
+            if (VelocityThreshold(pOther->GetAbsVelocity()))
+                m_OutputOnCatapulted.FireOutput(this, this);
+        }
+    }
 
-	if (!PassesTriggerFilters(pOther))
-		return;
+}
 
-	if (pOther->GetMoveParent())
-		return;
-    
+bool CTriggerCatapult::VelocityThreshold(Vector velOther) {
+
+    if (!m_bTestVelocity) // If we're not set to test velocity, then we launch anyway.
+        return true;
+
+    // According to https://developer.valvesoftware.com/wiki/Faith_Plate#Tips, these aren't too simple - It also uses the player's speed!
+    // Lower threshold is 100% - whatever the value
+    // Upper threshold is 100 + whatever the value
+    // It's confusing, but I'm going for a recreation of portal 2's entity.
+    float speedLower = m_PlayerLaunchSpeed * (1.0 - m_velThresholdLow);
+    float speedHigher = m_PlayerLaunchSpeed * (1.0 + m_velThresholdHigh);
+
+    if (velOther.Length() >= speedLower && velOther.Length() <= speedHigher) {
+        return true;
+    }
+
+    return false;
+
+}
+
+void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
+
+    if (!VelocityThreshold(pOther->GetAbsVelocity())) // Not going fast enough/too fast?
+        return;
 
     // These IFs are confusing and could probably be written better, I'm just happy it's working.
     // First we check if we actually have a target set. if we don't, we choose to launch by angles and skip everything else.
@@ -131,7 +166,7 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 
     if (pOther->IsPlayer())
         pOther->SetAbsVelocity(velGoZoomZoom);
-    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We do different velocity checking here, copied from Dog of all things!
+    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We modify the velocity here to take into account drag and such
         IPhysicsObject *pPhysObject = pOther->VPhysicsGetObject();
 
         AngularImpulse velRotZoomZoom = Vector();
@@ -142,7 +177,7 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
             velRotZoomZoom = RandomAngularImpulse( 0, 0 );
         }
 
-        Vector velIntemediaryZoomZoom = VecCheckToss( this, this->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), -1, 1.0f, false );
+        Vector velIntemediaryZoomZoom = velGoZoomZoom;
         Vector velUnit = velIntemediaryZoomZoom;
         VectorNormalize(velUnit);
 
@@ -150,7 +185,7 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 
         float flDrag = pPhysObject->CalculateLinearDrag( velIntemediaryZoomZoom );
 
-        velIntemediaryZoomZoom = velIntemediaryZoomZoom + ( velUnit * ( flDrag * flDrag ) ) / flTest;
+        velIntemediaryZoomZoom = velIntemediaryZoomZoom + ( velUnit * ( flDrag * flDrag ) );
 
         velGoZoomZoom = velIntemediaryZoomZoom;
 
