@@ -7,6 +7,7 @@
 #include "cbase.h"
 #include "triggers.h"
 #include "movevars_shared.h"
+#include "ai_basenpc.h" // provides VecCheckToss(), which is used when lobbing physics objects
 
 ConVar sv_debug_catapults( "sv_debug_catapults", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "Display some debug information for catapults." );
 
@@ -130,21 +131,36 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 
     if (pOther->IsPlayer())
         pOther->SetAbsVelocity(velGoZoomZoom);
-    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) {
+    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We do different velocity checking here, copied from Dog of all things!
+        IPhysicsObject *pPhysObject = pOther->VPhysicsGetObject();
+
         AngularImpulse velRotZoomZoom = Vector();
         if (m_bApplyRandomRotation) {
-            float maxRandom = m_PhysicsLaunchSpeed / 10; // 450 = 45deg, 900 = 90 deg, etc.
-
-            velRotZoomZoom = RandomVector(-maxRandom, maxRandom);
+            velRotZoomZoom = RandomAngularImpulse( -90 , 90 ) / pPhysObject->GetMass();
+        }
+        else {
+            velRotZoomZoom = RandomAngularImpulse( 0, 0 );
         }
 
-        pOther->VPhysicsGetObject()->SetVelocity(&velGoZoomZoom, &velRotZoomZoom);
+        Vector velIntemediaryZoomZoom = VecCheckToss( this, this->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), -1, 1.0f, false );
+        Vector velUnit = velIntemediaryZoomZoom;
+        VectorNormalize(velUnit);
+
+        float flTest = 1000 / velIntemediaryZoomZoom.Length();
+
+        float flDrag = pPhysObject->CalculateLinearDrag( velIntemediaryZoomZoom );
+
+        velIntemediaryZoomZoom = velIntemediaryZoomZoom + ( velUnit * ( flDrag * flDrag ) ) / flTest;
+
+        velGoZoomZoom = velIntemediaryZoomZoom;
+
+        pPhysObject->SetVelocity(&velGoZoomZoom, &velRotZoomZoom);
     }
     // We have launched the thing!
     m_OutputOnCatapulted.FireOutput(this, this);
 }
 
-Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) { // TODO: this doesn't take into account vphysics drag, which is quite strong
+Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) {
     /** Copied parts from the antlion, bodged the rest **/
 
     float minJumpHeight;
