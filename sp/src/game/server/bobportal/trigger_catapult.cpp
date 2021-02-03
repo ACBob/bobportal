@@ -38,6 +38,7 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
         QAngle m_LaunchDirection;
 
         bool m_bLaunchByAngles;
+        bool m_bApplyRandomRotation;
 };
 
 LINK_ENTITY_TO_CLASS(trigger_catapult, CTriggerCatapult)
@@ -47,6 +48,7 @@ BEGIN_DATADESC( CTriggerCatapult )
     DEFINE_KEYFIELD(m_jumpTarget, FIELD_STRING, "launchTarget"),
     DEFINE_KEYFIELD(m_PlayerLaunchSpeed, FIELD_FLOAT, "playerSpeed"),
     DEFINE_KEYFIELD(m_PhysicsLaunchSpeed, FIELD_FLOAT, "physicsSpeed"),
+    DEFINE_KEYFIELD(m_bApplyRandomRotation, FIELD_BOOLEAN, "applyAngularImpulse"),
 
     DEFINE_KEYFIELD(m_vLaunchDirection, FIELD_VECTOR, "launchDirection"),
 
@@ -115,21 +117,34 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
     // Else, we just launch by the angle.
     else {
         Vector LaunchDir;
-        VectorRotate( (const Vector&)Vector(1,0,0), (const QAngle&)m_LaunchDirection, (Vector&)LaunchDir );
-        velGoZoomZoom = LaunchDir * ( pOther-IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed );
+	    VectorRotate( m_vLaunchDirection, EntityToWorldTransform(), LaunchDir );
+        velGoZoomZoom = LaunchDir * (pOther->IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed);
     }
 
     if (sv_debug_catapults.GetInt())
         NDebugOverlay::Line( GetAbsOrigin(), velGoZoomZoom, 255, 255, 0, 0, 5 ); // Yellow
 
 
-    pOther->SetGroundEntity(NULL); // Essential for allowing the player to yEET
-    pOther->SetAbsVelocity(velGoZoomZoom);
+    pOther->SetGroundEntity(NULL); // Essential for allowing the stuff to yEET
+
+
+    if (pOther->IsPlayer())
+        pOther->SetAbsVelocity(velGoZoomZoom);
+    else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) {
+        AngularImpulse velRotZoomZoom = Vector();
+        if (m_bApplyRandomRotation) {
+            float maxRandom = m_PhysicsLaunchSpeed / 10; // 450 = 45deg, 900 = 90 deg, etc.
+
+            velRotZoomZoom = RandomVector(-maxRandom, maxRandom);
+        }
+
+        pOther->VPhysicsGetObject()->SetVelocity(&velGoZoomZoom, &velRotZoomZoom);
+    }
     // We have launched the thing!
     m_OutputOnCatapulted.FireOutput(this, this);
 }
 
-Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) {
+Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) { // TODO: this doesn't take into account vphysics drag, which is quite strong
     /** Copied parts from the antlion, bodged the rest **/
 
     float minJumpHeight;
