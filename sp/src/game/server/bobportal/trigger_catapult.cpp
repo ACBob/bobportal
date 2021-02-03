@@ -36,6 +36,8 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
         
         Vector m_vLaunchDirection;
         QAngle m_LaunchDirection;
+
+        bool m_bLaunchByAngles;
 };
 
 LINK_ENTITY_TO_CLASS(trigger_catapult, CTriggerCatapult)
@@ -60,10 +62,9 @@ void CTriggerCatapult::Spawn() {
     SetSolid(SOLID_VPHYSICS);
     SetModel( STRING( GetModelName() ) );
 
-    m_LaunchDirection = QAngle(m_vLaunchDirection.x, m_vLaunchDirection.y, m_vLaunchDirection.z);
+    m_bLaunchByAngles = (m_jumpTarget == NULL_STRING);
 
-    if (m_jumpTarget == NULL_STRING)
-        Warning("prop_catapult at %.0f %.0f %.0f without a target!\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z);
+    m_LaunchDirection = QAngle(m_vLaunchDirection.x, m_vLaunchDirection.y, m_vLaunchDirection.z);
 
     AddSolidFlags(FSOLID_NOT_SOLID | FSOLID_TRIGGER);
 
@@ -84,31 +85,59 @@ void CTriggerCatapult::Touch(CBaseEntity *pOther) {
 		return;
     
 
-    if (m_jumpTarget == NULL_STRING) { // TODO: portal 2's functionality of just launching in the set direction
-        Error("prop_catapult at %.0f %.0f %.0f has no target! Cannot launch!\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z);
-        return;
-    }
-
-    // Get the entitiy
+    // These IFs are confusing and could probably be written better, I'm just happy it's working.
+    // First we check if we actually have a target set. if we don't, we choose to launch by angles and skip everything else.
+    
     CBaseEntity *pJumpTarget = NULL;
-    pJumpTarget = gEntList.FindEntityByName(pJumpTarget, m_jumpTarget);
+    // Then, if we are willing to launch by target, we look for the target.
+    if (m_jumpTarget != NULL_STRING) {
+        // Get the entitiy
+        pJumpTarget = gEntList.FindEntityByName(pJumpTarget, m_jumpTarget);
 
-    if (pJumpTarget == NULL) {
-        Error("prop_catapult at %.0f %.0f %.0f couldn't find its' target. Can't launch!\n", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z);
-        return; // Didn't find anyone!
+        // If we can't find it, we warn the stupid mapper and then choose to launch by angles anyway.
+        if (pJumpTarget == NULL) {
+            Warning("prop_catapult at %.0f %.0f %.0f has a target set, but we can't find a target by that name (%s).\nUsing angle launch instead...", GetAbsOrigin().x, GetAbsOrigin().y, GetAbsOrigin().z, m_jumpTarget);
+            m_bLaunchByAngles = true;
+        }
     }
-	
-	Vector velGoZoomZoom = GenerateVelocity(pOther->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), pOther->IsPlayer());
+    else {
+        m_bLaunchByAngles = true;
+    }
+
+    Vector velGoZoomZoom;
+
+    // If we don't want to launch by angles, we do the cool launch
+    if (!m_bLaunchByAngles) {
+        velGoZoomZoom = GenerateVelocity(pOther->GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), pOther->IsPlayer());
+        if (sv_debug_catapults.GetInt())
+            NDebugOverlay::Line( GetAbsOrigin(), pJumpTarget->GetAbsOrigin(), 0, 255, 0, 0, 5 ); // Green
+    }
+    // Else, we just launch by the angle.
+    else {
+        Vector LaunchDir;
+        VectorRotate( (const Vector&)Vector(1,0,0), (const QAngle&)m_LaunchDirection, (Vector&)LaunchDir );
+        velGoZoomZoom = LaunchDir * ( pOther-IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed );
+    }
+
+    if (sv_debug_catapults.GetInt())
+        NDebugOverlay::Line( GetAbsOrigin(), velGoZoomZoom, 255, 255, 0, 0, 5 ); // Yellow
+
 
     pOther->SetGroundEntity(NULL); // Essential for allowing the player to yEET
     pOther->SetAbsVelocity(velGoZoomZoom);
     // We have launched the thing!
     m_OutputOnCatapulted.FireOutput(this, this);
 }
+
 Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, bool isPlayer) {
     /** Copied parts from the antlion, bodged the rest **/
 
-    float minJumpHeight = GetAbsOrigin().z - vecTarget.z; // It must be ATLEAST high enough for our target
+    float minJumpHeight;
+    if (vecOther.z > vecTarget.z)
+        minJumpHeight = GetAbsOrigin().z - vecTarget.z; // It must be ATLEAST high enough for our target
+    else if (vecOther.z < vecTarget.z)
+        minJumpHeight = GetAbsOrigin().z + vecTarget.z; // It must be ATLEAST high enough for our target
+
     float maxHorzVel;
     if (isPlayer)
     	maxHorzVel = m_PlayerLaunchSpeed;
@@ -118,11 +147,9 @@ Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, boo
     Vector vecApex;
 	Vector rawJumpVel = CalcJumpLaunchVelocity(GetAbsOrigin(), vecTarget, GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex );
 
-	if ( sv_debug_catapults.GetInt() == 1 )
+	if ( sv_debug_catapults.GetInt())
 	{
 		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 255, 0, 5 ); // Magenta
-		NDebugOverlay::Line( GetAbsOrigin(), vecTarget, 0, 255, 0, 0, 5 ); // Green
-		NDebugOverlay::Line( GetAbsOrigin(), rawJumpVel, 255, 255, 0, 0, 5 ); // Yellow
 
         // Draw the path we SHOULD take
 		NDebugOverlay::Line( GetAbsOrigin(), vecApex, 255, 0, 0, 0, 5 ); // Red
