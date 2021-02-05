@@ -85,7 +85,15 @@ void CTriggerCatapult::Spawn() {
 
     m_bLaunchByAngles = (m_jumpTarget == NULL_STRING);
 
-    m_LaunchDirection = QAngle(m_vLaunchDirection.x, m_vLaunchDirection.y, m_vLaunchDirection.z);
+    if (m_bLaunchByAngles) { // Copied from trigger_push
+        // Convert launch direction from angles to a vector
+        Vector vecAbsDir;
+        QAngle angPushDir = QAngle(m_vLaunchDirection.x, m_vLaunchDirection.y, m_vLaunchDirection.z);
+        AngleVectors(angPushDir, &vecAbsDir);
+
+        // Convert it to entity space
+        VectorIRotate( vecAbsDir, EntityToWorldTransform(), m_vLaunchDirection );
+    }
 
     AddSolidFlags(FSOLID_NOT_SOLID | FSOLID_TRIGGER);
 
@@ -167,8 +175,9 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
     // Else, we just launch by the angle.
     else {
         Vector LaunchDir;
-	    VectorRotate( m_vLaunchDirection, EntityToWorldTransform(), LaunchDir );
-        velGoZoomZoom = LaunchDir * (pOther->IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed);
+        float LaunchSpeed = pOther->IsPlayer() ? m_PlayerLaunchSpeed : m_PhysicsLaunchSpeed;
+	    VectorRotate( m_vLaunchDirection, EntityToWorldTransform(), LaunchDir ); // Convert our angle back to world space
+        velGoZoomZoom = LaunchSpeed * LaunchDir; // go!
     }        
 
 
@@ -185,10 +194,7 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
 
 
     if (pOther->IsPlayer()) {
-        if (!m_bLaunchByAngles) 
-            pOther->SetAbsVelocity(velGoZoomZoom);
-        else
-            pOther->ApplyAbsVelocityImpulse(velGoZoomZoom);
+        pOther->SetAbsVelocity(velGoZoomZoom);
     }
     else if (pOther->GetMoveType() == MOVETYPE_VPHYSICS && pOther->VPhysicsGetObject()) { // We launch physics objects here
         IPhysicsObject *pPhysObject = pOther->VPhysicsGetObject();
@@ -201,10 +207,7 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
             velRotZoomZoom = RandomAngularImpulse( 0, 0 );
         }
 
-        if (!m_bLaunchByAngles)
-            pPhysObject->SetVelocityInstantaneous(&velGoZoomZoom, &velRotZoomZoom);
-        else
-            pPhysObject->ApplyForceCenter(velGoZoomZoom);
+        pPhysObject->SetVelocityInstantaneous(&velGoZoomZoom, &velRotZoomZoom);
     }
     // We have launched the thing!
     m_OutputOnCatapulted.FireOutput(this, this);
