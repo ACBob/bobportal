@@ -341,6 +341,7 @@ $Project "Server (Bob Portal)"
 
             $File   "bobportal\prop_button.cpp"
             $File   "bobportal\prop_button.h"
+            $File   "bobportal\trigger_catapult.cpp"
 
 			$Folder	"Weapons"
 			{
