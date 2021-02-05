@@ -8,6 +8,8 @@
 #include "triggers.h"
 #include "movevars_shared.h"
 #include "ai_basenpc.h" // provides VecCheckToss(), which is used when lobbing physics objects
+#include "player_pickup.h"
+#include "const.h"
 
 ConVar sv_debug_catapults( "sv_debug_catapults", "0", FCVAR_CHEAT | FCVAR_REPLICATED, "Display some debug information for catapults." );
 
@@ -28,6 +30,8 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
 
         bool VelocityThreshold(Vector velOther);
 
+        void EnablePlayerMovement();
+
     protected:
         string_t m_jumpTarget;
 
@@ -36,6 +40,10 @@ class CTriggerCatapult : public CBaseVPhysicsTrigger {
 
         float m_velThresholdLow;
         float m_velThresholdHigh;
+
+        float m_flDisableMovementTime;
+
+        CBasePlayer *m_lastPlayerHit; // FIXME: will not work in multiplayer, as if the next player triggers us, we will never re-enable the other player's movement
 
         COutputEvent m_OutputOnCatapulted;
         
@@ -61,6 +69,7 @@ BEGIN_DATADESC( CTriggerCatapult )
     DEFINE_KEYFIELD(m_velThresholdLow, FIELD_FLOAT, "lowerThreshold"),
     DEFINE_KEYFIELD(m_velThresholdHigh, FIELD_FLOAT, "upperThreshold"),
     DEFINE_KEYFIELD(m_bTestVelocity, FIELD_BOOLEAN, "useThresholdCheck"),
+    DEFINE_KEYFIELD(m_flDisableMovementTime, FIELD_FLOAT, "AirCtrlSupressionTime"),
 
     DEFINE_OUTPUT(m_OutputOnCatapulted, "OnCatapulted")
 
@@ -81,6 +90,12 @@ void CTriggerCatapult::Spawn() {
     AddSolidFlags(FSOLID_NOT_SOLID | FSOLID_TRIGGER);
 
     VPhysicsInitShadow( false, false );
+
+    if (m_flDisableMovementTime < 0) {
+        m_flDisableMovementTime = 0.25; // Quarter second default if below -1
+    }
+
+    RegisterThinkContext("enableMovementContext");
 }
 
 void CTriggerCatapult::StartTouch(CBaseEntity *pOther) { // FIXME: We only launch if they have just started to touch us, but is that the behaviour we want?
@@ -158,6 +173,15 @@ void CTriggerCatapult::BopIt(CBaseEntity *pOther) {
 
 
     pOther->SetGroundEntity(NULL); // Essential for allowing the stuff to yEET
+    Pickup_ForcePlayerToDropThisObject(pOther); // make the player drop it
+
+    // IF they're a player, AND we have a disable time, AND we aren't launching by angles
+    if (pOther->IsPlayer() && m_flDisableMovementTime > 0 && !m_bLaunchByAngles) {
+
+        pOther->AddFlag(FL_ATCONTROLS); // Disable this player's movement HACK: This flag disables the player moving, but not looking. There may be a better flag to use!
+        m_lastPlayerHit = (CBasePlayer*) pOther;
+        SetContextThink(&CTriggerCatapult::EnablePlayerMovement, gpGlobals->curtime + m_flDisableMovementTime, "enableMovementContext");
+    }
 
 
     if (pOther->IsPlayer()) {
@@ -204,7 +228,8 @@ Vector CTriggerCatapult::GenerateVelocity(Vector vecOther, Vector vecTarget, IPh
         maxHorzVel = m_PhysicsLaunchSpeed;
 
     Vector vecApex;
-	Vector rawJumpVel = CalcJumpLaunchVelocity(GetAbsOrigin(), vecTarget, GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex );
+    // Calculate it from the entity, doing it from OUR origin is silly.
+	Vector rawJumpVel = CalcJumpLaunchVelocity(vecOther, vecTarget, GetCurrentGravity(), &minJumpHeight, maxHorzVel, &vecApex ); 
 
     // We're not done yet if we're a physics object!
     if (!isPlayer) {
@@ -283,4 +308,9 @@ Vector CTriggerCatapult::CalcJumpLaunchVelocity(const Vector &startPos, const Ve
 	// -----------------------------------------------------------
 
 	return jumpVel;
+}
+
+void CTriggerCatapult::EnablePlayerMovement() {
+    if (m_lastPlayerHit != NULL)
+        m_lastPlayerHit->RemoveFlag(FL_ATCONTROLS);
 }
